@@ -5,16 +5,17 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class Board {
   private final int width;
   private final int height;
 
-  private final Set<Position> mice = new HashSet<>();
-  private final Set<Position> obstacles = new HashSet<>();
-  private final Set<Position> turbo = new HashSet<>();
-  private final Map<Position, Position> teleports = new HashMap<>();
+  private final Set<Position> mice =   ConcurrentHashMap.newKeySet();
+  private final Set<Position> obstacles = ConcurrentHashMap.newKeySet();
+  private final Set<Position> turbo = ConcurrentHashMap.newKeySet();
+  private final Map<Position, Position> teleports = new ConcurrentHashMap<>();
 
   public enum MoveResult { MOVED, ATE_MOUSE, HIT_OBSTACLE, ATE_TURBO, TELEPORTED }
 
@@ -31,10 +32,10 @@ public final class Board {
   public int width() { return width; }
   public int height() { return height; }
 
-  public synchronized Set<Position> mice() { return new HashSet<>(mice); }
-  public synchronized Set<Position> obstacles() { return new HashSet<>(obstacles); }
-  public synchronized Set<Position> turbo() { return new HashSet<>(turbo); }
-  public synchronized Map<Position, Position> teleports() { return new HashMap<>(teleports); }
+  public  Set<Position> mice() { return  Set.copyOf(mice); }
+  public  Set<Position> obstacles() { return  Set.copyOf(obstacles); }
+  public  Set<Position> turbo() { return  Set.copyOf(turbo); }
+  public  Map<Position, Position> teleports() { return Map.copyOf(teleports); }
 
   public synchronized MoveResult step(Snake snake) {
     Objects.requireNonNull(snake, "snake");

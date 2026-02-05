@@ -2,9 +2,10 @@ package co.eci.snake.core;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 public final class Snake {
-  private final Deque<Position> body = new ArrayDeque<>();
+  private final ConcurrentLinkedDeque<Position> body = new ConcurrentLinkedDeque<>();
   private volatile Direction direction;
   private int maxLength = 5;
 
@@ -19,7 +20,7 @@ public final class Snake {
 
   public Direction direction() { return direction; }
 
-  public void turn(Direction dir) {
+  public synchronized void turn(Direction dir) {
     if ((direction == Direction.UP && dir == Direction.DOWN) ||
         (direction == Direction.DOWN && dir == Direction.UP) ||
         (direction == Direction.LEFT && dir == Direction.RIGHT) ||
