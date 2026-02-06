@@ -28,6 +28,32 @@ mvn -q -DskipTests exec:java -Dsnakes=4
 
 ---
 
+## Funcionalidad de los Botones
+
+- **Inicio**: Inicia el ciclo del juego y el movimiento de las serpientes. Si el juego ya está en curso, permite detener la ejecución (Stop).
+- **Pausa**: Detiene temporalmente el movimiento de todas las serpientes y el reloj del juego. Técnicamente, cambia el estado del reloj y pone a los hilos en espera.
+- **Reanudar**: Reactiva los hilos de las serpientes y el reloj para continuar el juego desde el punto donde se pausó.
+
+---
+
+## Detalles de Implementación (Concurrencia)
+
+Para garantizar que el juego funcione correctamente con varios hilos , se utilizó lo siguiente:
+
+### 1. Control de Estado con `AtomicReference.compareAndSet`
+En la clase `GameClock`, el estado del juego se gestiona mediante un `AtomicReference<GameState>`. 
+- El método `compareAndSet(esperado, nuevo)` se utiliza para realizar cambios de estado de forma **atomica**. 
+- Esto asegura que, por ejemplo, si dos eventos intentan pausar el juego al mismo tiempo, el cambio solo ocurra una vez y de forma segura sin necesidad de bloqueos  (`locks`), evitando condiciones de carrera al cambiar entre los esrados del juego.
+
+### 2. Sincronización con `lock`, `wait` y `notifyAll`
+Para detener y reanudar las serpientes , se usó un objeto compartido como monitor (`lock`) que se les en la creacion de cada `snakeRunner`:
+
+- **`wait()` (en `SnakeRunner`)**: Cada hilo de serpiente verifica una condición (`banderita`). Si el juego está pausado, el hilo llama a `lock.wait()`, lo que lo pone en un estado de espera "dormido", liberando la CPU hasta que alguien (El boton de reaundar) lo despierte.
+- **`notifyAll()` (en `SnakeApp`)**: Cuando el usuario presiona **Inicio** o **Reanudar**, se llama a `lock.notifyAll()`. Esto despierta a todos los hilos que estaban esperando en el objeto `lock`, permitiendo que las serpientes continúen su movimiento.
+- **`synchronized(lock)`**: Todos los llamados a `wait()` y `notifyAll()` ocurren dentro de un bloque sincronizado sobre el objeto `lock` para garantizar la exclusión mutua y la visibilidad de los cambios entre hilos.
+
+---
+
 ## Reglas del juego (resumen)
 
 - **N serpientes** corren de forma autónoma (cada una en su propio hilo).
