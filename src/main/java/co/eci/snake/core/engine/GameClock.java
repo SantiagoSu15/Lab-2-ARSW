@@ -13,6 +13,7 @@ public final class GameClock implements AutoCloseable {
   private final long periodMillis;
   private final Runnable tick;
   private final java.util.concurrent.atomic.AtomicReference<GameState> state = new AtomicReference<>(GameState.STOPPED);
+  private Boolean estado = false;
 
   public GameClock(long periodMillis, Runnable tick) {
     if (periodMillis <= 0) throw new IllegalArgumentException("periodMillis must be > 0");
@@ -28,8 +29,20 @@ public final class GameClock implements AutoCloseable {
     }
   }
 
-  public void pause()  { state.set(GameState.PAUSED); }
-  public void resume() { state.set(GameState.RUNNING); }
-  public void stop()   { state.set(GameState.STOPPED); }
+  public void pause(){
+    state.compareAndSet(GameState.RUNNING, GameState.PAUSED);
+  }
+
+
+  public void resume() { state.compareAndSet(GameState.PAUSED, GameState.RUNNING);
+  }
+  public void stop() {
+    state.set(GameState.STOPPED);
+    scheduler.shutdownNow();
+  }
+
   @Override public void close() { scheduler.shutdownNow(); }
+
+  public Boolean getEstado() { return estado; }
+  public void setEstado(Boolean estado) { this.estado = estado; }
 }
