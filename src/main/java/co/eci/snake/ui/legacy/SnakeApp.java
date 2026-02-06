@@ -11,6 +11,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -19,7 +20,7 @@ public final class SnakeApp extends JFrame {
 
   private final Board board;
   private final GamePanel gamePanel;
-  //botones
+
   private final JButton inicioBoton;
   private final JButton PausaBoton;
   private final JButton ReaundarBoton;
@@ -34,7 +35,7 @@ public final class SnakeApp extends JFrame {
     super("The Snake Race");
     this.board = new Board(35, 28);
 
-    int N = Integer.getInteger("snakes", 2);
+    int N = Integer.getInteger("snakes", 20);
     for (int i = 0; i < N; i++) {
       int x = 2 + (i * 3) % board.width();
       int y = 2 + (i * 2) % board.height();
@@ -185,6 +186,7 @@ public final class SnakeApp extends JFrame {
       clock.setEstado(false);
       clock.pause();
       System.out.println("pausa");
+      gamePanel.mostrarSerpientes();
     }
   }
 
@@ -278,6 +280,61 @@ public final class SnakeApp extends JFrame {
       }
       g2.dispose();
     }
+
+
+    public void mostrarSerpientes() {
+      JFrame ventana = new JFrame("Stats");
+      ventana.setSize(300, 300);
+      ventana.setLocationRelativeTo(null);
+      ventana.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+      JPanel panel = new JPanel() {
+        @Override
+        protected void paintComponent(Graphics g) {
+          super.paintComponent(g);
+          Graphics2D g2 = (Graphics2D) g.create();
+          g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+          int cellSize = 4;
+          int startX = 10;
+          int offsetY = 20;
+
+          var snakes = snakesSupplier.get();
+          if (snakes.isEmpty()) return;
+
+          Snake mejor = snakes.stream().max(Comparator.comparingInt(Snake::getLength)).orElse(null);
+          Snake peor  = snakes.stream().min(Comparator.comparingInt(Snake::getLength)).orElse(null);
+
+          if (mejor != null) {
+            g2.setColor(Color.GREEN);
+            int length = mejor.getLength();
+            for (int i = 0; i < length; i++) {
+              g2.fillRect(startX + i * cellSize, offsetY, cellSize, cellSize);
+            }
+            g2.setColor(Color.BLACK);
+            g2.drawString("Mejor: " + length, startX, offsetY - 5);
+          }
+
+          offsetY = 120;
+          if (peor != null) {
+            g2.setColor(Color.RED);
+            int length = peor.getLength();
+            for (int i = 0; i < length; i++) {
+              g2.fillRect(startX + i * cellSize, offsetY, cellSize, cellSize);
+            }
+            g2.setColor(Color.BLACK);
+            g2.drawString("Peor: " + length, startX, offsetY - 5);
+          }
+
+          g2.dispose();
+        }
+      };
+
+      ventana.add(panel);
+      ventana.setVisible(true);
+    }
+
+
   }
 
   public static void launch() {
