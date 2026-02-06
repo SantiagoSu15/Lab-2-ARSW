@@ -52,99 +52,150 @@ co.eci.snake
 
 ---
 
-# Actividades del laboratorio
+## Prime Finder
 
-## Parte I — (Calentamiento) `wait/notify` en un programa multi-hilo
+## Diseño de Sincronización
 
-1. Toma el programa [**PrimeFinder**](https://github.com/ARSW-ECI/wait-notify-excercise).
-2. Modifícalo para que **cada _t_ milisegundos**:
-   - Se **pausen** todos los hilos trabajadores.
-   - Se **muestre** cuántos números primos se han encontrado.
-   - El programa **espere ENTER** para **reanudar**.
-3. La sincronización debe usar **`synchronized`**, **`wait()`**, **`notify()` / `notifyAll()`** sobre el **mismo monitor** (sin _busy-waiting_).
-4. Entrega en el reporte de laboratorio **las observaciones y/o comentarios** explicando tu diseño de sincronización (qué lock, qué condición, cómo evitas _lost wakeups_).
+El proyecto implementa un sistema de sincronización thread-safe para pausar y reanudar múltiples hilos de búsqueda de números primos de manera coordinada. Los mecanismos principales son:
 
-> Objetivo didáctico: practicar suspensión/continuación **sin** espera activa y consolidar el modelo de monitores en Java.
+#### **1. Uso de `synchronized`**
+- La clase `Control` actúa como **monitor de sincronización** para coordinar todos los hilos
+- Los métodos `pauseAll()`, `resumeAll()` e `isPaused()` están sincronizados, garantizando acceso exclusivo a la variable de estado `paused`
+- En `PrimeFinderThread`, cada hilo verifica el estado de pausa dentro de un bloque `synchronized(control)`, asegurando visibilidad consistente del estado compartido
 
----
+#### **2. Patrón Wait/Notify**
+- **Wait**: Cuando un hilo detecta que `control.isPaused()` es `true`, ejecuta `control.wait()` dentro del bloque sincronizado. Esto libera el lock del monitor y pone el hilo en espera, evitando consumo innecesario de CPU (busy-wait)
+- **Notify**: El método `resumeAll()` utiliza `notifyAll()` para despertar a todos los hilos en espera simultáneamente cuando se reanuda la ejecución
 
-## Parte II — SnakeRace concurrente (núcleo del laboratorio)
+#### **3. Evitando Busy-Waits**
+En lugar de implementar un ciclo activo que constantemente verifica el estado:
+Se utiliza el patrón wait/notify
 
-### 1) Análisis de concurrencia
+#### **4. Prevención de Deadlocks**
+El diseño evita deadlocks mediante:
+- **Jerarquía de locks simple**: Solo existe un objeto monitor (`control`), eliminando el riesgo de locks
+- **Liberación atómica**: `wait()` libera automáticamente el lock, permitiendo que otros hilos adquieran el monitor
+- **Uso de `notifyAll()`**: Garantiza que todos los hilos en espera sean notificados, reanudando el tranajo de todos aquellos pausados
+- **Verificación en bucle `while`**: permite que el proceso automaticamente verifique la condicion impuesta
 
-- Explica **cómo** el código usa hilos para dar autonomía a cada serpiente.
-- **Identifica** y documenta en **`el reporte de laboratorio`**:
-  - Posibles **condiciones de carrera**.
-  - **Colecciones** o estructuras **no seguras** en contexto concurrente.
-  - Ocurrencias de **espera activa** (busy-wait) o de sincronización innecesaria.
+### Flujo de Sincronización
 
-### 2) Correcciones mínimas y regiones críticas
+1. El hilo `Control` pausea todos los hilos cada 5 segundos mediante `pauseAll()`
+2. Cada `PrimeFinderThread` verifica periódicamente si está pausado usando el monitor `control`
+3. Los hilos pausados ejecutan `wait()`, liberando el lock y esperando pasivamente
+4. Después de mostrar los resultados y esperar input del usuario, `Control` ejecuta `resumeAll()` con `notifyAll()`
+5. Todos los hilos despiertan, re-verifican la condición y continúan su ejecución
 
-- **Elimina** esperas activas reemplazándolas por **señales** / **estados** o mecanismos de la librería de concurrencia.
-- Protege **solo** las **regiones críticas estrictamente necesarias** (evita bloqueos amplios).
-- Justifica en **`el reporte de laboratorio`** cada cambio: cuál era el riesgo y cómo lo resuelves.
+## Análisis de Concurrencia y Soluciones Implementadas
 
-### 3) Control de ejecución seguro (UI)
+### 1. Clase `Snake`
 
-- Implementa la **UI** con **Iniciar / Pausar / Reanudar** (ya existe el botón _Action_ y el reloj `GameClock`).
-- Al **Pausar**, muestra de forma **consistente** (sin _tearing_):
-  - La **serpiente viva más larga**.
-  - La **peor serpiente** (la que **primero murió**).
-- Considera que la suspensión **no es instantánea**; coordina para que el estado mostrado no quede “a medias”.
+#### Problema identificado: `ArrayDeque` no es thread-safe
+- **Estructura original**: `ArrayDeque` para almacenar las posiciones del cuerpo de la serpiente.
+- **Problema**: `ArrayDeque` no es seguro en contexto concurrente. Un hilo puede estar modificando la estructura (movimiento de la serpiente) mientras otro la está leyendo (renderizado en UI), causando condiciones de carrera.
+- **Solución implementada**: Reemplazar `ArrayDeque` por **`ConcurrentLinkedDeque`**.
+  - Esta colección es thread-safe y permite operaciones concurrentes sin bloqueos explícitos.
+  - Evita `ConcurrentModificationException` cuando el hilo de renderizado dibuja la serpiente mientras el `SnakeRunner` la está moviendo.
 
-### 4) Robustez bajo carga
+#### Campo `direction` debe ser volatile
+- **Problema**: La dirección de la serpiente puede ser modificada desde el hilo de UI (eventos de teclado) y leída desde el `SnakeRunner`.
+- **Solución implementada**: Declarar el campo `direction` como **`volatile`**.
+  - Garantiza que cada hilo siempre vea el valor más actualizado de la dirección.
+  - Evita que los hilos trabajen con copias cacheadas de la variable.
 
-- Ejecuta con **N alto** (`-Dsnakes=20` o más) y/o aumenta la velocidad.
-- El juego **no debe romperse**: sin `ConcurrentModificationException`, sin lecturas inconsistentes, sin _deadlocks_.
-- Si habilitas **teleports** y **turbo**, verifica que las reglas no introduzcan carreras.
-
-> Entregables detallados más abajo.
-
----
-
-## Entregables
-
-1. **Código fuente** funcionando en **Java 21**.
-2. Todo de manera clara en **`**el reporte de laboratorio**`** con:
-   - Data races encontradas y su solución.
-   - Colecciones mal usadas y cómo se protegieron (o sustituyeron).
-   - Esperas activas eliminadas y mecanismo utilizado.
-   - Regiones críticas definidas y justificación de su **alcance mínimo**.
-3. UI con **Iniciar / Pausar / Reanudar** y estadísticas solicitadas al pausar.
+#### Sincronización en el método `turn()`
+- **Solución implementada**: Agregar **`synchronized`** al método `turn()`.
+  - Evita condiciones de carrera cuando múltiples eventos de teclado intentan cambiar la dirección simultáneamente.
+  - Garantiza que los cambios de dirección sean atómicos.
 
 ---
 
-## Criterios de evaluación (10)
+### 2. Clase `Board`
 
-- (3) **Concurrencia correcta**: sin data races; sincronización bien localizada.
-- (2) **Pausa/Reanudar**: consistencia visual y de estado.
-- (2) **Robustez**: corre **con N alto** y sin excepciones de concurrencia.
-- (1.5) **Calidad**: estructura clara, nombres, comentarios; sin _code smells_ obvios.
-- (1.5) **Documentación**: **`reporte de laboratorio`** claro, reproducible;
+#### Problema: `HashMap` no es thread-safe
+- **Estructuras originales**: `HashMap` para `mice`, `obstacles`, `turbo` y `teleports`.
+- **Problema**: Los `HashMap` no son seguros en contexto concurrente. Múltiples hilos accediendo y modificando estas estructuras pueden causar inconsistencias y excepciones.
+- **Solución implementada**: Reemplazar todos los `HashMap` por **`ConcurrentHashMap`**.
+  - Permite operaciones concurrentes seguras sin bloqueos amplios.
+  - Evita bloqueos innecesarios en operaciones de lectura/escritura.
 
----
+#### Getters sin necesidad de sincronización
+- **Análisis**: Solo hay una instancia del tablero compartida por todos los hilos.
+- **Solución implementada**: **Eliminar `synchronized`** de los métodos getter de colecciones:
+  - `getMice()`, `getObstacles()`, `getTurbo()`, `getTeleports()`
+  - Los `ConcurrentHashMap` ya son thread-safe por sí mismos.
+  - La sincronización innecesaria reduce el rendimiento sin agregar seguridad.
 
-## Tips y configuración útil
-
-- **Número de serpientes**: `-Dsnakes=N` al ejecutar.
-- **Tamaño del tablero**: cambiar el constructor `new Board(width, height)`.
-- **Teleports / Turbo**: editar `Board.java` (métodos de inicialización y reglas en `step(...)`).
-- **Velocidad**: ajustar `GameClock` (tick) o el `sleep` del `SnakeRunner` (incluye modo turbo).
-
----
-
-## Cómo correr pruebas
-
-```bash
-mvn clean verify
-```
-
-Incluye compilación y ejecución de pruebas JUnit. Si tienes análisis estático, ejecútalo en `verify` o `site` según tu `pom.xml`.
+#### Métodos de modificación de colecciones
+- **Solución implementada**: **Eliminar `synchronized`** de métodos como:
+  - `addMouse()`, `removeMouse()`, `addObstacle()`, etc.
+  - Los `ConcurrentHashMap` garantizan operaciones atómicas.
+  - Evita bloqueos innecesarios que reducen el paralelismo.
 
 ---
 
+### 3. Clase `SnakeRunner`
+
+#### Diseño de ejecución autónoma
+- **Implementación**: Cada serpiente se ejecuta en su propio hilo (virtual thread).
+- **Método `run()`**:
+  - Ejecuta un bucle con **`try-catch`** mientras el hilo no esté interrumpido.
+  - Maneja el movimiento autónomo de la serpiente de forma simple.
+  - Captura excepciones para evitar que un error en una serpiente detenga todo el sistema.
+- **Ventaja**: Cada serpiente opera de forma independiente, permitiendo verdadero paralelismo.
+
+---
+
+### 4. Clase `SnakeApp`
+
+#### Uso de Virtual Threads (Java 21)
+- **Implementación**: Para cada serpiente creada se asigna un **hilo virtual**.
+  - Los hilos virtuales son ligeros y eficientes, permitiendo escalar a muchas serpientes sin problema.
+  - Todos los hilos comparten la **misma instancia del tablero** (`Board`).
+
+#### Sincronización del método `step()`
+- **Problema**: Múltiples serpientes comparten el mismo tablero y pueden modificar el estado simultáneamente.
+- **Solución implementada**: El método **`step()` está sincronizado**.
+  - Solo un hilo puede ejecutar el movimiento de su serpiente a la vez.
+  - Evita condiciones de carrera en la actualización del estado del juego.
+  - Garantiza que las verificaciones de colisiones y reglas del juego sean consistentes.
+
+---
+
+### 5. Clase `GameClock`
+
+#### Problema identificado: Pausa solo afecta el render, no la lógica
+- **Comportamiento observado**: Al pausar el juego, el renderizado se detiene pero **los hilos de las serpientes siguen ejecutándose**.
+- **Consecuencia**: Al reanudar, las serpientes aparecen en posiciones diferentes porque continuaron moviéndose durante la pausa.
+- **Análisis**: 
+  - El `GameClock` solo controla el ciclo de renderizado.
+  - No detiene la ejecución de los `SnakeRunner`.
+  - Los hilos virtuales siguen procesando movimientos en segundo plano.
+
+#### Consideración para la solución
+- Para una pausa completa, se debe:
+  - Suspender/reanudar los `SnakeRunner` mediante señales o estados.
+  - Usar mecanismos como `wait()`/`notify()` o variables de condición.
+  - Coordinar todos los hilos para que se detengan de forma sincronizada.
+
+---
+
+## Regiones Críticas Identificadas
+
+1. **`Snake.turn()`**: la modificación de dirección debe ser atómica.
+2. **`SnakeApp.step()`**: la actualización del estado del juego en tablero compartido.
+3. **Acceso a colecciones del `Board`**: Protegido mediante `ConcurrentHashMap`.
+
+---
+
+## Eliminación de Espera Activa
+
+- No se identificaron casos de busy-waiting en el código base.
+- Los `SnakeRunner` usan `Thread.sleep()` para controlar la velocidad, lo cual es apropiado.
+- La pausa/reanudación puede mejorarse con `wait()`/`notify()` para evitar polling.
+---
 ## Créditos
 
-Este laboratorio es una adaptación modernizada del ejercicio **SnakeRace** de ARSW. El enunciado de actividades se conserva para mantener los objetivos pedagógicos del curso.
+este laboratorio fue modificado para la entrega y cumplimiento de requisitos propuestos para la misma por los estudiantes Santiago Suarez y Juan Felipe Rangel
 
 **Base construida por el Ing. Javier Toquica.**
