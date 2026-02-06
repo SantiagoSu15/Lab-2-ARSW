@@ -79,6 +79,7 @@ co.eci.snake
 ---
 
 ## Prime Finder
+### archivo a repositorio de prime finder https://github.com/juanfe-rangel/Prime-Finder.git
 
 ## Diseño de Sincronización
 
